@@ -58,11 +58,11 @@ class UsuariosController
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        $nome = trim($input['nome'] ?? '');
-        $email = trim($input['email'] ?? '');
-        $senha = trim($input['senha'] ?? '');
-        $perfil = trim($input['perfil'] ?? 'atendente');
-        $status = filter_var($input['status'] ?? 'ativo');
+        $nome = trim($_POST['nome'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $senha = $_POST['senha'] ?? '';
+        $perfil = $_POST['perfil'] ?? 'atendente';
+        $status = $_POST['status'] ?? 'ativo';
 
         if ($nome === '' || $email === '' || $senha === '') {
             http_response_code(400);
@@ -116,9 +116,9 @@ class UsuariosController
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-        $nome = trim($input['nome'] ?? '');
-        $email = trim($input['email'] ?? '');
+        $id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
+        $nome = trim($_POST['nome'] ?? '');
+        $email = trim($_POST['email'] ?? '');
         $perfil = $_POST['perfil'] ?? 'atendente';
         $status = $_POST['status'] ?? 'ativo';
 
@@ -173,7 +173,7 @@ class UsuariosController
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+        $id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
 
         if (!$id) {
             http_response_code(400);
