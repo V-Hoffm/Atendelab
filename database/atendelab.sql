@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Tempo de geração: 27/05/2026 às 01:41
+-- Tempo de geração: 17/06/2026 às 00:25
 -- Versão do servidor: 10.4.32-MariaDB
 -- Versão do PHP: 8.2.12
 
@@ -55,6 +55,14 @@ CREATE TABLE `pessoas` (
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Despejando dados para a tabela `pessoas`
+--
+
+INSERT INTO `pessoas` (`id`, `nome`, `email`, `tipo_documento`, `documento`, `curso`, `periodo`, `criado_em`) VALUES
+(2, 'vitao', 'vitin@ggg.com', 'cpf', '44444', 'ads', 'quatro', '2026-06-03 23:34:18'),
+(3, 'victor', 'vitin@gam.com', 'matricula', '11440082302', 'Engenharia de Software', 'Quinto', '2026-06-03 23:56:35');
+
 -- --------------------------------------------------------
 
 --
@@ -84,6 +92,14 @@ CREATE TABLE `usuarios` (
   `status` enum('ativo','inativo') DEFAULT 'ativo',
   `criado_em` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Despejando dados para a tabela `usuarios`
+--
+
+INSERT INTO `usuarios` (`id`, `nome`, `email`, `senha`, `perfil`, `status`, `criado_em`) VALUES
+(1, 'Administrador', 'admin@atendelab.com', '$2y$10$FKkmn/pVxd6cfXFhAC.xfucxzrTf0GaxFYvsr2.ZrjKN0eX5ye6h.', 'admin', 'ativo', '2026-06-02 23:13:54'),
+(2, 'Victor', 'victorhoffmann@atendelab.com', '12345678', 'admin', 'ativo', '2026-06-02 23:14:29');
 
 --
 -- Índices para tabelas despejadas
@@ -133,7 +149,7 @@ ALTER TABLE `atendimentos`
 -- AUTO_INCREMENT de tabela `pessoas`
 --
 ALTER TABLE `pessoas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT de tabela `tipo_atendimento`
@@ -145,7 +161,7 @@ ALTER TABLE `tipo_atendimento`
 -- AUTO_INCREMENT de tabela `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Restrições para tabelas despejadas
