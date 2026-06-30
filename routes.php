@@ -1,3 +1,4 @@
+
 <?php
 
 require_once __DIR__ . '/app/Controllers/UsuariosController.php';
@@ -11,7 +12,7 @@ $controller = $_GET['controller'] ?? 'auth';
 $action = $_GET['action'] ?? 'login';
 
 if ($controller === 'auth') {
-    $authController = new AuthController();
+    $auth = new AuthController();
 
     switch ($action) {
         case 'login':
@@ -34,7 +35,7 @@ if ($controller === 'auth') {
     exit;
 }
 
-// exigirAutenticacao();
+exigirAutenticacao();
 
 switch ($controller) {
     case 'usuarios':
