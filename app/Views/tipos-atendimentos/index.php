@@ -16,25 +16,20 @@ require __DIR__ . '/../layouts/header.php';
         <form id="formTipo">
             <input type="hidden" name="id" id="tipoId">
             <div class="row g-3">
-                <div class="col-md-6"><label class="form-label">Nome *</label><input
-                    class="form-control" name="nome"
-                    required></div>
-                <div class="col-md-3"><label class="form-label">Status</label><select
-                    class="form-select" name="status">
-                    <option value="ativo">Ativo</option>
-                    <option value="inativo">Inativo</option>
-                </select></div>
-                <div class="col-12"><label class="form-label">Descrição</label><textarea
-                    class="form-control"
-                    name="descricao" rows="2"></textarea></div>
+                <div class="col-md-6"><label class="form-label">Nome *</label><input class="form-control" name="nome"
+                        required></div>
+                <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status">
+                        <option value="ativo">Ativo</option>
+                        <option value="inativo">Inativo</option>
+                    </select></div>
+                <div class="col-12"><label class="form-label">Descrição</label><textarea class="form-control"
+                        name="descricao" rows="2"></textarea></div>
             </div>
-            <div class="d-flex gap-2 mt-3"><button class="btn btn-success" type="submit">Salvar</button><button
-                class="btn btn-outline-secondary" type="button"
-                onclick="fecharFormulario()">Cancelar</button></div>
+            <div class="d-flex gap-2 mt-3"><button class="btn btn-success">Salvar</button><button
+                    class="btn btn-outline-secondary" type="button" onclick="fecharFormulario()">Cancelar</button></div>
         </form>
     </div>
 </div>
- 
 <div class="card border-0 shadow-sm">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -54,35 +49,97 @@ require __DIR__ . '/../layouts/header.php';
         </table>
     </div>
 </div>
- 
+
 <script>
+    /*
+    |--------------------------------------------------------------------------
+    | REFERÊNCIAS AOS ELEMENTOS DA TELA
+    |--------------------------------------------------------------------------
+    | Guardamos em variáveis os elementos que serão utilizados várias vezes.
+    | Isso evita buscar o mesmo elemento repetidamente no HTML.
+    */
     const formTipo = document.getElementById('formTipo');
     const cardFormulario = document.getElementById('cardFormulario');
     const tabelaTipos = document.getElementById('tabelaTipos');
     const campoTipoId = document.getElementById('tipoId');
     const tituloFormulario = document.getElementById('tituloFormulario');
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ABRIR FORMULÁRIO
+    |--------------------------------------------------------------------------
+    | Remove a classe d-none para tornar o formulário visível.
+    */
     function abrirFormulario() {
         cardFormulario.classList.remove('d-none');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FECHAR FORMULÁRIO
+    |--------------------------------------------------------------------------
+    | Oculta o formulário e limpa os campos preenchidos anteriormente.
+    */
     function fecharFormulario() {
         cardFormulario.classList.add('d-none');
+
         formTipo.reset();
+
         campoTipoId.value = '';
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOVO TIPO DE ATENDIMENTO
+    |--------------------------------------------------------------------------
+    | Prepara o formulário para cadastrar um novo registro.
+    */
     function novoTipo() {
         fecharFormulario();
+
         tituloFormulario.textContent = 'Novo tipo';
+
         abrirFormulario();
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CARREGAR TIPOS DE ATENDIMENTO
+    |--------------------------------------------------------------------------
+    | Consulta o backend e exibe os registros na tabela.
+    |
+    | Fluxo:
+    | View
+    | → AtendeLabApi.get()
+    | → routes.php
+    | → TiposAtendimentosController::listar()
+    | → banco de dados
+    | → JSON
+    | → atualização da tabela
+    */
     async function carregarTipos() {
         try {
-            const resposta = await AtendeLabApi.get('tipos', 'listar');
+            const resposta = await AtendeLabApi.get(
+                'tipos',
+                'listar'
+            );
+
             const tipos = AtendeLabApi.toList(resposta);
+
+            /*
+            |--------------------------------------------------------------------------
+            | LISTA VAZIA
+            |--------------------------------------------------------------------------
+            */
             if (tipos.length === 0) {
                 tabelaTipos.innerHTML = `
                     <tr>
@@ -91,25 +148,38 @@ require __DIR__ . '/../layouts/header.php';
                         </td>
                     </tr>
                 `;
+
                 return;
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | MONTAGEM DAS LINHAS DA TABELA
+            |--------------------------------------------------------------------------
+            | O map() percorre os registros retornados pelo backend.
+            | Para cada tipo, cria uma linha HTML.
+            */
             tabelaTipos.innerHTML = tipos.map((tipo) => {
                 const classeStatus = tipo.status === 'ativo'
                     ? 'text-bg-success'
                     : 'text-bg-secondary';
+
                 return `
                     <tr>
                         <td>
                             ${AtendeLabApi.escape(tipo.nome)}
                         </td>
+
                         <td>
                             ${AtendeLabApi.escape(tipo.descricao || '')}
                         </td>
+
                         <td>
                             <span class="badge ${classeStatus}">
                                 ${AtendeLabApi.escape(tipo.status)}
                             </span>
                         </td>
+
                         <td class="text-end">
                             <button
                                 type="button"
@@ -118,6 +188,7 @@ require __DIR__ . '/../layouts/header.php';
                             >
                                 Editar
                             </button>
+
                             <button
                                 type="button"
                                 class="btn btn-sm btn-outline-danger"
@@ -129,6 +200,7 @@ require __DIR__ . '/../layouts/header.php';
                     </tr>
                 `;
             }).join('');
+
         } catch (error) {
             AtendeLabApi.showAlert(
                 'alerta',
@@ -137,23 +209,43 @@ require __DIR__ . '/../layouts/header.php';
             );
         }
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EDITAR TIPO DE ATENDIMENTO
+    |--------------------------------------------------------------------------
+    | Busca um registro pelo ID e preenche o formulário com os dados retornados.
+    */
     async function editarTipo(id) {
         try {
             const resposta = await AtendeLabApi.get(
                 'tipos',
-                'buscar',
+                'buscarPorId',
                 { id }
             );
+
             const tipo = AtendeLabApi.toObject(resposta);
+
             novoTipo();
+
             tituloFormulario.textContent = 'Editar tipo';
+
+            /*
+            |--------------------------------------------------------------------------
+            | PREENCHIMENTO AUTOMÁTICO DO FORMULÁRIO
+            |--------------------------------------------------------------------------
+            | Percorre os dados recebidos do backend.
+            | Quando existe um campo com o mesmo nome, preenche o valor.
+            */
             for (const [nomeCampo, valorCampo] of Object.entries(tipo)) {
                 const campo = formTipo.elements.namedItem(nomeCampo);
+
                 if (campo) {
                     campo.value = valorCampo ?? '';
                 }
             }
+
         } catch (error) {
             AtendeLabApi.showAlert(
                 'alerta',
@@ -162,37 +254,49 @@ require __DIR__ . '/../layouts/header.php';
             );
         }
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SALVAR CADASTRO OU ATUALIZAÇÃO
+    |--------------------------------------------------------------------------
+    | O mesmo formulário é utilizado para:
+    | - cadastrar um novo tipo;
+    | - atualizar um tipo existente.
+    |
+    | Quando existe ID, executa atualizar.
+    | Quando não existe ID, executa criar.
+    */
     formTipo.addEventListener('submit', async (event) => {
         event.preventDefault();
- 
+
         const id = campoTipoId.value;
- 
+
         const acao = id
             ? 'atualizar'
             : 'criar';
- 
+
         const mensagemSucesso = id
             ? 'Tipo atualizado com sucesso.'
             : 'Tipo cadastrado com sucesso.';
- 
+
         try {
             await AtendeLabApi.post(
                 'tipos',
                 acao,
                 new FormData(formTipo)
             );
- 
+
             AtendeLabApi.showAlert(
                 'alerta',
                 mensagemSucesso,
                 'success'
             );
- 
+
             fecharFormulario();
- 
+
             await carregarTipos();
- 
+
         } catch (error) {
             AtendeLabApi.showAlert(
                 'alerta',
@@ -201,31 +305,39 @@ require __DIR__ . '/../layouts/header.php';
             );
         }
     });
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | INATIVAR TIPO DE ATENDIMENTO
+    |--------------------------------------------------------------------------
+    | O registro não é excluído fisicamente.
+    | Seu status é alterado para inativo, preservando o histórico.
+    */
     async function inativarTipo(id) {
         const confirmou = confirm(
             'Deseja realmente inativar este tipo?'
         );
- 
+
         if (!confirmou) {
             return;
         }
- 
+
         try {
             await AtendeLabApi.post(
                 'tipos',
                 'inativar',
                 { id }
             );
- 
+
             AtendeLabApi.showAlert(
                 'alerta',
                 'Tipo inativado com sucesso.',
                 'success'
             );
- 
+
             await carregarTipos();
- 
+
         } catch (error) {
             AtendeLabApi.showAlert(
                 'alerta',
@@ -234,10 +346,18 @@ require __DIR__ . '/../layouts/header.php';
             );
         }
     }
- 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | INICIALIZAÇÃO DA TELA
+    |--------------------------------------------------------------------------
+    | Após o HTML ser carregado, consulta os registros existentes.
+    */
     document.addEventListener(
         'DOMContentLoaded',
         carregarTipos
     );
 </script>
+
 <?php require __DIR__ . '/../layouts/footer.php'; ?>

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 class AtendimentosController
 {
     private PDO $pdo;
@@ -10,139 +12,342 @@ class AtendimentosController
         $this->pdo = $pdo;
     }
 
-    private function json(array $dados, int $status = 200): void
-    {
-        http_response_code($status);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($dados, JSON_UNESCAPED_UNICODE);
-    }
-
     public function listar(): void
     {
-        $sql = 'SELECT a.id, p.nome AS pessoa_nome,
-                       t.nome AS tipo_nome,
-                       u.nome AS responsavel_nome,
-                       a.descricao, a.status,
-                       a.data_atendimento, a.horario_atendimento,
-                       a.observacao_final
-                FROM atendimentos a
-                INNER JOIN pessoas p ON p.id = a.pessoa_id
-                INNER JOIN tipos_atendimentos t
-                       ON t.id = a.tipo_atendimento_id
-                INNER JOIN usuarios u ON u.id = a.usuario_id
-                ORDER BY a.id DESC';
-        $this->json($this->pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+        $this->cabecalhoJson();
+
+        $busca = trim((string) ($_GET['busca'] ?? ''));
+        $status = trim((string) ($_GET['status'] ?? ''));
+        $tipoId = trim((string) ($_GET['tipo_atendimento_id'] ?? ''));
+        $usuarioId = trim((string) ($_GET['usuario_id'] ?? ''));
+        $dataInicio = trim((string) ($_GET['data_inicio'] ?? ''));
+        $dataFim = trim((string) ($_GET['data_fim'] ?? ''));
+
+        [$sql, $parametros] = $this->montarConsultaBaseComFiltros(
+            $busca,
+            $status,
+            $tipoId,
+            $usuarioId,
+            $dataInicio,
+            $dataFim
+        );
+
+        $sql .= ' ORDER BY a.data_atendimento DESC, a.horario_atendimento DESC, a.id DESC';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($parametros);
+
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
-    public function buscar(): void
+    public function visualizar(): void
     {
-        $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-        if (!$id) {
-            $this->json(['erro' => 'ID inválido.'], 400);
-            return;
-        }
+        $this->cabecalhoJson();
+        $id = $this->obterId($_GET);
 
-        $stmt = $this->pdo->prepare(
-            'SELECT a.*, p.nome AS pessoa_nome,
-                    t.nome AS tipo_nome, u.nome AS responsavel_nome
-             FROM atendimentos a
-             INNER JOIN pessoas p ON p.id = a.pessoa_id
-             INNER JOIN tipos_atendimentos t
-                    ON t.id = a.tipo_atendimento_id
-             INNER JOIN usuarios u ON u.id = a.usuario_id
-             WHERE a.id = :id'
-        );
-        $stmt->execute(['id' => $id]);
+        $sql = $this->consultaBase() . ' WHERE a.id = :id';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([':id' => $id]);
         $atendimento = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$atendimento) {
-            $this->json(['erro' => 'Atendimento não encontrado.'], 404);
+            $this->responderErro('Atendimento não encontrado.', 404);
             return;
         }
-        $this->json($atendimento);
+
+        echo json_encode($atendimento, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
     public function criar(): void
     {
-        $pessoaId = filter_var(
-            $_POST['pessoa_id'] ?? null,
-            FILTER_VALIDATE_INT
-        );
-        $tipoId = filter_var(
-            $_POST['tipo_atendimento_id'] ?? null,
-            FILTER_VALIDATE_INT
-        );
-        $usuarioId = filter_var(
-            $_POST['usuario_id'] ?? null,
-            FILTER_VALIDATE_INT
-        );
-        $descricao = trim($_POST['descricao'] ?? '');
-        $data      = $_POST['data_atendimento'] ?? '';
-        $horario   = $_POST['horario_atendimento'] ?? '';
-        $status    = $_POST['status'] ?? 'aberto';
+        $this->cabecalhoJson();
+        $this->exigirMetodoPost();
 
-        if (!$pessoaId || !$tipoId || !$usuarioId ||
-            $descricao === '' || $data === '' || $horario === '') {
-            $this->json(['erro' => 'Preencha os campos obrigatórios.'], 422);
+        $pessoaId = $this->inteiroObrigatorio($_POST['pessoa_id'] ?? null, 'pessoa_id');
+        $tipoId = $this->inteiroObrigatorio($_POST['tipo_atendimento_id'] ?? null, 'tipo_atendimento_id');
+        $usuarioId = $this->usuarioResponsavel();
+        $descricao = trim((string) ($_POST['descricao'] ?? ''));
+        $data = trim((string) ($_POST['data_atendimento'] ?? ''));
+        $horario = trim((string) ($_POST['horario_atendimento'] ?? ''));
+
+        if ($descricao === '' || $data === '' || $horario === '') {
+            $this->responderErro('Pessoa, tipo, descrição, data e horário são obrigatórios.', 422);
             return;
         }
-        if (!in_array($status, ['aberto', 'em_andamento'], true)) {
-            $this->json(['erro' => 'Status inicial inválido.'], 422);
+
+        if (!$this->dataValida($data)) {
+            $this->responderErro('Data inválida. Utilize o formato YYYY-MM-DD.', 422);
+            return;
+        }
+
+        if (!$this->horarioValido($horario)) {
+            $this->responderErro('Horário inválido. Utilize o formato HH:MM ou HH:MM:SS.', 422);
+            return;
+        }
+
+        if (!$this->registroAtivoExiste('pessoas', $pessoaId)) {
+            $this->responderErro('A pessoa informada não existe ou está inativa.', 422);
+            return;
+        }
+
+        if (!$this->registroAtivoExiste('tipos_atendimentos', $tipoId)) {
+            $this->responderErro('O tipo de atendimento informado não existe ou está inativo.', 422);
+            return;
+        }
+
+        if (!$this->registroAtivoExiste('usuarios', $usuarioId)) {
+            $this->responderErro('O usuário responsável não existe ou está inativo.', 422);
             return;
         }
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO atendimentos
-             (pessoa_id, tipo_atendimento_id, usuario_id, descricao,
-              status, data_atendimento, horario_atendimento)
+            "INSERT INTO atendimentos
+                (pessoa_id, tipo_atendimento_id, usuario_id, descricao, status, data_atendimento, horario_atendimento)
              VALUES
-             (:pessoa_id, :tipo_id, :usuario_id, :descricao,
-              :status, :data_atendimento, :horario_atendimento)'
+                (:pessoa_id, :tipo_atendimento_id, :usuario_id, :descricao, 'aberto', :data_atendimento, :horario_atendimento)"
         );
         $stmt->execute([
-            'pessoa_id'           => $pessoaId,
-            'tipo_id'             => $tipoId,
-            'usuario_id'          => $usuarioId,
-            'descricao'           => $descricao,
-            'status'              => $status,
-            'data_atendimento'    => $data,
-            'horario_atendimento' => $horario,
+            ':pessoa_id' => $pessoaId,
+            ':tipo_atendimento_id' => $tipoId,
+            ':usuario_id' => $usuarioId,
+            ':descricao' => $descricao,
+            ':data_atendimento' => $data,
+            ':horario_atendimento' => $horario,
         ]);
-        $this->json(['mensagem' => 'Atendimento registrado com sucesso.'], 201);
+
+        $id = (int) $this->pdo->lastInsertId();
+        http_response_code(201);
+        echo json_encode([
+            'mensagem' => 'Atendimento registrado com sucesso.',
+            'id' => $id,
+            'protocolo' => $this->formatarProtocolo($id),
+            'status' => 'aberto',
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
-    public function alterarStatus(): void
+    public function atualizarStatus(): void
     {
-        $id         = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
-        $status     = $_POST['status'] ?? '';
-        $observacao = trim($_POST['observacao_final'] ?? '');
+        $this->cabecalhoJson();
+        $this->exigirMetodoPost();
 
-        if (!$id || !in_array(
-            $status,
-            ['aberto', 'em_andamento', 'concluido'],
-            true
-        )) {
-            $this->json(['erro' => 'ID ou status inválido.'], 422);
-            return;
-        }
+        $id = $this->obterId($_POST);
+        $status = trim((string) ($_POST['status'] ?? ''));
+        $observacaoFinal = trim((string) ($_POST['observacao_final'] ?? ''));
 
-        if ($status === 'concluido' && $observacao === '') {
-            $this->json([
-                'erro' => 'Informe a observação final para concluir.'
-            ], 422);
+        if (!$this->statusValido($status)) {
+            $this->responderErro('Status inválido. Use aberto, em_andamento ou concluido.', 422);
             return;
         }
 
         $stmt = $this->pdo->prepare(
             'UPDATE atendimentos
-             SET status = :status, observacao_final = :observacao
+             SET status = :status,
+                 observacao_final = :observacao_final
              WHERE id = :id'
         );
         $stmt->execute([
-            'id'         => $id,
-            'status'     => $status,
-            'observacao' => $observacao !== '' ? $observacao : null,
+            ':status' => $status,
+            ':observacao_final' => $status === 'concluido' && $observacaoFinal !== '' ? $observacaoFinal : null,
+            ':id' => $id,
         ]);
-        $this->json(['mensagem' => 'Status atualizado com sucesso.']);
+
+        if ($stmt->rowCount() === 0 && !$this->atendimentoExiste($id)) {
+            $this->responderErro('Atendimento não encontrado.', 404);
+            return;
+        }
+
+        echo json_encode(['mensagem' => 'Status do atendimento atualizado com sucesso.'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
+
+    public function opcoesFormulario(): void
+    {
+        $this->cabecalhoJson();
+
+        $pessoas = $this->pdo->query("SELECT id, nome FROM pessoas WHERE status = 'ativo' ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+        $tipos = $this->pdo->query("SELECT id, nome FROM tipos_atendimentos WHERE status = 'ativo' ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+        $usuarios = $this->pdo->query("SELECT id, nome, perfil FROM usuarios WHERE status = 'ativo' ORDER BY nome")->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'pessoas' => $pessoas,
+            'tipos_atendimentos' => $tipos,
+            'usuarios_responsaveis' => $usuarios,
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
+
+    private function montarConsultaBaseComFiltros(
+        string $busca,
+        string $status,
+        string $tipoId,
+        string $usuarioId,
+        string $dataInicio,
+        string $dataFim
+    ): array {
+        $sql = $this->consultaBase() . ' WHERE 1 = 1';
+        $parametros = [];
+
+        if ($busca !== '') {
+            $somenteNumero = preg_replace('/\D+/', '', $busca);
+            $sql .= ' AND (p.nome LIKE :busca OR CONCAT("ATD-", LPAD(a.id, 4, "0")) LIKE :busca';
+            if ($somenteNumero !== '') {
+                $sql .= ' OR a.id = :id_busca';
+                $parametros[':id_busca'] = (int) $somenteNumero;
+            }
+            $sql .= ')';
+            $parametros[':busca'] = '%' . $busca . '%';
+        }
+
+        if ($status !== '') {
+            if (!$this->statusValido($status)) {
+                $this->responderErro('Status inválido. Use aberto, em_andamento ou concluido.', 422);
+                exit;
+            }
+            $sql .= ' AND a.status = :status';
+            $parametros[':status'] = $status;
+        }
+
+        if ($tipoId !== '') {
+            $sql .= ' AND a.tipo_atendimento_id = :tipo_id';
+            $parametros[':tipo_id'] = $this->inteiroObrigatorio($tipoId, 'tipo_atendimento_id');
+        }
+
+        if ($usuarioId !== '') {
+            $sql .= ' AND a.usuario_id = :usuario_id';
+            $parametros[':usuario_id'] = $this->inteiroObrigatorio($usuarioId, 'usuario_id');
+        }
+
+        if ($dataInicio !== '') {
+            if (!$this->dataValida($dataInicio)) {
+                $this->responderErro('Data inicial inválida. Utilize YYYY-MM-DD.', 422);
+                exit;
+            }
+            $sql .= ' AND a.data_atendimento >= :data_inicio';
+            $parametros[':data_inicio'] = $dataInicio;
+        }
+
+        if ($dataFim !== '') {
+            if (!$this->dataValida($dataFim)) {
+                $this->responderErro('Data final inválida. Utilize YYYY-MM-DD.', 422);
+                exit;
+            }
+            $sql .= ' AND a.data_atendimento <= :data_fim';
+            $parametros[':data_fim'] = $dataFim;
+        }
+
+        return [$sql, $parametros];
+    }
+
+    private function consultaBase(): string
+    {
+        return 'SELECT
+                    a.id,
+                    CONCAT("ATD-", LPAD(a.id, 4, "0")) AS protocolo,
+                    a.pessoa_id,
+                    p.nome AS pessoa_nome,
+                    a.tipo_atendimento_id,
+                    ta.nome AS tipo_atendimento_nome,
+                    a.usuario_id,
+                    u.nome AS responsavel_nome,
+                    a.descricao,
+                    a.status,
+                    a.data_atendimento,
+                    a.horario_atendimento,
+                    a.observacao_final,
+                    a.criado_em,
+                    a.atualizado_em
+                FROM atendimentos a
+                INNER JOIN pessoas p ON p.id = a.pessoa_id
+                INNER JOIN tipos_atendimentos ta ON ta.id = a.tipo_atendimento_id
+                INNER JOIN usuarios u ON u.id = a.usuario_id';
+    }
+
+    private function usuarioResponsavel(): int
+    {
+        if (isset($_SESSION['usuario']['id'])) {
+            return (int) $_SESSION['usuario']['id'];
+        }
+
+        return $this->inteiroObrigatorio($_POST['usuario_id'] ?? null, 'usuario_id');
+    }
+
+    private function registroAtivoExiste(string $tabela, int $id): bool
+    {
+        $tabelasPermitidas = ['pessoas', 'tipos_atendimentos', 'usuarios'];
+        if (!in_array($tabela, $tabelasPermitidas, true)) {
+            return false;
+        }
+
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM {$tabela} WHERE id = :id AND status = 'ativo'");
+        $stmt->execute([':id' => $id]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function atendimentoExiste(int $id): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM atendimentos WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function statusValido(string $status): bool
+    {
+        return in_array($status, ['aberto', 'em_andamento', 'concluido'], true);
+    }
+
+    private function dataValida(string $data): bool
+    {
+        $objeto = DateTime::createFromFormat('Y-m-d', $data);
+        return $objeto !== false && $objeto->format('Y-m-d') === $data;
+    }
+
+    private function horarioValido(string $horario): bool
+    {
+        foreach (['H:i', 'H:i:s'] as $formato) {
+            $objeto = DateTime::createFromFormat($formato, $horario);
+            if ($objeto !== false && $objeto->format($formato) === $horario) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function formatarProtocolo(int $id): string
+    {
+        return 'ATD-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function inteiroObrigatorio(mixed $valor, string $campo): int
+    {
+        $inteiro = filter_var($valor, FILTER_VALIDATE_INT);
+        if (!$inteiro || $inteiro < 1) {
+            $this->responderErro("O campo {$campo} deve conter um ID válido.", 422);
+            exit;
+        }
+
+        return (int) $inteiro;
+    }
+
+    private function obterId(array $origem): int
+    {
+        return $this->inteiroObrigatorio($origem['id'] ?? null, 'id');
+    }
+
+    private function exigirMetodoPost(): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->responderErro('Método não permitido. Utilize POST com x-www-form-urlencoded.', 405);
+            exit;
+        }
+    }
+
+    private function cabecalhoJson(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+
+    private function responderErro(string $mensagem, int $codigo): void
+    {
+        http_response_code($codigo);
+        echo json_encode(['erro' => $mensagem], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 }

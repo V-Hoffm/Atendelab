@@ -29,10 +29,7 @@ $perfilUsuario = htmlspecialchars(
 </title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="<?= $baseUrl ?>assets/css/style.css">
-<!--
-    Precisa ser carregado antes dos scripts específicos das páginas.
-    Não utilizar defer neste momento.
--->
+
 <script src="<?= $baseUrl ?>assets/js/api.js"></script>
 </head>
 <body class="bg-light">
